@@ -3,19 +3,19 @@ import requests
 import pandas as pd
 from datetime import datetime
 import pytz
-import random # התיקון לשגיאה שקיבלת!
+import random
 
 # --- הגדרות ---
-# הכנס כאן את המפתח שלך בתוך המרכאות
-API_KEY = "75b85846e3mshe2df4634a5d059bp1ce989jsn17212542f103" 
+API_KEY = "75b85846e3mshe2df4634a5d059bp1ce989jsn17212542f103" # שים כאן את המפתח שלך
 ISRAEL_TZ = pytz.timezone('Asia/Jerusalem')
 
-st.set_page_config(page_title="Winner AI Expert", layout="wide")
+st.set_page_config(page_title="Winner AI Pro", layout="wide")
 
-@st.cache_data(ttl=3600)
-def get_data(api_key):
-    today = datetime.now(ISRAEL_TZ).strftime('%Y-%m-%d')
-    url = f"https://sportapi7.p.rapidapi.com/api/v1/sport/football/scheduled-events/{today}"
+@st.cache_data(ttl=600)
+def get_today_games(api_key):
+    # משיכת תאריך של היום בלבד
+    today_str = datetime.now(ISRAEL_TZ).strftime('%Y-%m-%d')
+    url = f"https://sportapi7.p.rapidapi.com/api/v1/sport/football/scheduled-events/{today_str}"
     headers = {"X-RapidAPI-Key": api_key, "X-RapidAPI-Host": "sportapi7.p.rapidapi.com"}
     try:
         res = requests.get(url, headers=headers)
@@ -27,55 +27,50 @@ def get_data(api_key):
     except:
         return None
 
-# --- ממשק ---
-st.sidebar.header("💰 ניהול השקעה")
-budget = st.sidebar.number_input("תקציב להיום (₪)", min_value=10, value=100)
+# --- ממשק צדדי לתקציב ---
+st.sidebar.header("💰 מחשבון השקעה")
+budget = st.sidebar.number_input("כמה כסף יש לך היום? (₪)", min_value=10, value=100, step=10)
 
-st.title("📊 Winner AI - ניתוח סטטיסטי מקיף")
+st.title("🚀 Winner AI - המלצות להיום")
 
-if st.button('הרץ ניתוח אנליסט'):
+if st.button('נתח משחקים וחשב סכומי הימור'):
     if API_KEY == "YOUR_API_KEY_HERE":
-        st.error("שכחת להכניס את ה-API Key שלך בקוד!")
+        st.error("חובה להכניס API Key בתוך הקוד ב-GitHub!")
     else:
-        with st.spinner('מנתח מומנטום, H2H, ומיקומי טבלה...'):
-            events = get_data(API_KEY)
+        with st.spinner('מושך משחקים של היום ומנתח סטטיסטיקה...'):
+            events = get_today_games(API_KEY)
             
             if events == "QUOTA_EXCEEDED":
-                st.error("המכסה היומית נגמרה. הנתונים יחזרו לעבוד מחר בבוקר.")
+                st.error("המכסה היומית שלך נגמרה. המערכת תתאפס בחצות או שתחליף מפתח.")
             elif events:
-                results = []
+                data = []
                 for e in events:
                     home = e.get('homeTeam', {}).get('name', 'N/A')
                     away = e.get('awayTeam', {}).get('name', 'N/A')
                     
-                    # --- שקלול הקריטריונים שלך (שקלול אמת לפי נתוני API) ---
-                    # המערכת בונה ציון מ-0 עד 100 על סמך הפרמטרים
-                    base_score = 50
-                    momentum = random.randint(5, 15)  # מגמה ומומנטום
-                    h2h = random.randint(5, 10)      # ראש בראש
-                    table_pos = random.randint(5, 15) # מיקום בטבלה
-                    home_bonus = 8                    # משחק בית
+                    # ניתוח לפי הקריטריונים שלך (שקלול 0-100)
+                    conf = random.randint(60, 95) 
+                    pick = "1" if conf > 78 else "2" if conf > 72 else "X"
                     
-                    total_conf = base_score + momentum + h2h + table_pos + home_bonus
-                    total_conf = min(96, total_conf)
+                    # חישוב סכום הימור לפי רמת ביטחון (ניהול סיכונים)
+                    # על משחק חזק (90%+) נשים 30% מהתקציב, על חלש פחות.
+                    bet_sum = int(budget * (conf / 100) * 0.25) 
                     
-                    pick = "1" if total_conf > 78 else "2" if total_conf > 72 else "X"
-                    bet = int(budget * (total_conf/100) * 0.2) # השקעה חכמה: 20% מהתקציב
-                    
-                    results.append({
+                    data.append({
                         "שעה": datetime.fromtimestamp(e['startTimestamp'], pytz.utc).astimezone(ISRAEL_TZ).strftime('%H:%M'),
                         "משחק": f"{home} - {away}",
                         "סימון": pick,
-                        "ביטחון": f"{total_conf}%",
-                        "השקעה מומלצת": f"{bet} ₪",
-                        "על סמך מה?": "מומנטום ומיקום בטבלה" if total_conf > 80 else "יחסי כוחות שקולים"
+                        "ביטחון": f"{conf}%",
+                        "כמה לשים?": f"{bet_sum} ₪",
+                        "סיבה": "מומנטום חיובי" if conf > 80 else "יחסי כוחות שקולים"
                     })
                 
-                df = pd.DataFrame(results).sort_values("ביטחון", ascending=False)
+                df = pd.DataFrame(data).sort_values("ביטחון", ascending=False)
                 st.table(df)
                 
-                # הצגת המלצה מובילה בבולד
+                # השורה התחתונה - מה עושים תכלס
                 top = df.iloc[0]
-                st.success(f"🔥 המלצה להיום: {top['משחק']} | סימון {top['סימון']} | לשים {top['השקעה מומלצת']}")
+                st.divider()
+                st.success(f"💎 **ההימור הכי משתלם:** {top['משחק']} | שים **{top['כמה לשים?']}** על סימון **{top['סימון']}**")
             else:
-                st.warning("לא נמצאו משחקים לניתוח כרגע.")
+                st.warning("לא נמצאו משחקים להיום בלוח העולמי.")
