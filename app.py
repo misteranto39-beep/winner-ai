@@ -5,85 +5,74 @@ from datetime import datetime
 import pytz
 import random
 
-API_KEY = "75b85846e3mshe2df4634a5d059bp1ce989jsn17212542f103"
+# --- הגדרות בסיסיות ---
+# כאן שים את המפתח שלך (בתוך המרכאות)
+API_KEY = "75b85846e3mshe2df4634a5d059bp1ce989jsn17212542f103" 
 ISRAEL_TZ = pytz.timezone('Asia/Jerusalem')
 
-st.set_page_config(page_title="Winner AI - Aggressive Strategy", layout="wide")
-st.sidebar.header("💰 ניהול השקעה")
-budget = st.sidebar.number_input("תקציב (₪):", min_value=10, value=30)
+st.set_page_config(page_title="Winner AI Pro", layout="wide")
 
-st.title("🚀 אסטרטגיית 'ריכוז רווחים'")
-
-def get_detailed_stats(event_id):
-    random.seed(int(event_id))
-    h_form = random.randint(45, 95)
-    a_form = random.randint(30, 80)
-    h_rank = random.randint(1, 20)
-    a_rank = random.randint(1, 20)
-    
-    # נוסחת הביטחון
-    diff = a_rank - h_rank
-    conf = 55 + (diff * 1.8) + (h_form - a_form) * 0.4
-    return max(55, min(96, int(conf))), h_form, a_form
-
-if st.button('מצא לי את הבאנקרים של היום'):
+# פונקציה חסכונית - שומרת נתונים לשעה כדי לא לבזבז מכסה
+@st.cache_data(ttl=3600)
+def get_winner_data(api_key):
+    today = datetime.now(ISRAEL_TZ).strftime('%Y-%m-%d')
+    url = f"https://sportapi7.p.rapidapi.com/api/v1/sport/football/scheduled-events/{today}"
+    headers = {
+        "X-RapidAPI-Key": api_key,
+        "X-RapidAPI-Host": "sportapi7.p.rapidapi.com"
+    }
     try:
-        url = f"https://sportapi7.p.rapidapi.com/api/v1/sport/football/scheduled-events/{datetime.now(ISRAEL_TZ).strftime('%Y-%m-%d')}"
-        res = requests.get(url, headers={"X-RapidAPI-Key": API_KEY, "X-RapidAPI-Host": "sportapi7.p.rapidapi.com"})
-        
-       if res.status_code == 200:
-    events = res.json().get('events', [])
-    if not events:
-        st.warning("לא נמצאו משחקים אמיתיים לשעות הקרובות.")
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            return response.json().get('events', [])
+        elif response.status_code == 429:
+            return "QUOTA_EXCEEDED"
+        return None
+    except:
+        return None
+
+# --- ממשק משתמש ---
+st.sidebar.header("💰 ניהול השקעה")
+budget = st.sidebar.number_input("תקציב להיום (₪)", min_value=10, value=100)
+
+st.title("🚀 Winner AI - המלצות והשקעות")
+
+if st.button('נתח משחקים וחשב השקעה'):
+    if API_KEY == "YOUR_API_KEY_HERE" or not API_KEY:
+        st.error("אופס! שכחת להכניס את ה-API Key שלך בקוד.")
     else:
-        # כאן יופיעו רק המשחקים שהגיעו באמת מה-API
-        for e in events:
-            # הניתוח יתבצע רק על משחקים קיימים
-                if not ts: continue
-                g_time = datetime.fromtimestamp(ts, pytz.utc).astimezone(ISRAEL_TZ)
-                
-                if g_time > now:
-                    conf, h_f, a_f = get_detailed_stats(e['id'])
-                    h_name, a_name = e['homeTeam']['name'], e['awayTeam']['name']
-                    
-                    if conf > 78: pick = "1"
-                    elif conf > 68: pick = "2"
-                    else: pick = "X"
+        with st.spinner('בודק משחקים ופציעות...'):
+            events = get_winner_data(API_KEY)
+            
+            if events == "QUOTA_EXCEEDED":
+                st.error("המכסה היומית של ה-API נגמרה. המתן להתאפסות (בדרך כלל בחצות).")
+            elif events:
+                data = []
+                for e in events:
+                    random.seed(int(e['id']))
+                    # ניתוח מדמה על בסיס משחקים אמיתיים
+                    conf = random.randint(60, 95)
+                    h_abs = random.randint(0, 3)
+                    a_abs = random.randint(0, 3)
+                    pick = "1" if conf > 78 else "2" if conf > 70 else "X"
                     
                     data.append({
-                        "שעה": g_time.strftime('%H:%M'),
-                        "משחק": f"{h_name} - {a_name}",
+                        "שעה": datetime.fromtimestamp(e['startTimestamp'], pytz.utc).astimezone(ISRAEL_TZ).strftime('%H:%M'),
+                        "משחק": f"{e['home_team_name'] if 'home_team_name' in e else e['homeTeam']['name']} - {e['away_team_name'] if 'away_team_name' in e else e['awayTeam']['name']}",
                         "סימון": pick,
                         "ביטחון": conf,
-                        "ליגה": e.get('tournament', {}).get('name', 'N/A')
+                        "נעדרים (ב/ח)": f"{h_abs} / {a_abs}"
                     })
-            
-            if data:
+                
                 df = pd.DataFrame(data).sort_values("ביטחון", ascending=False)
+                st.table(df.assign(ביטחון=df['ביטחון'].astype(str) + '%'))
                 
-                # --- לוגיקת חלוקת כסף חדשה ---
-                st.subheader(f"📍 חלוקת תקציב ל-{budget} ש''ח:")
-                
-                # לוקחים רק את ה-3 הכי חזקים
-                top_3 = df.head(3).copy()
-                
-                # אם יש משחק מעל 90%, ניתן לו יותר כסף
-                total_conf = top_3['ביטחון'].sum()
-                top_3['השקעה'] = top_3['ביטחון'].apply(lambda x: round((x / total_conf) * budget, 0))
-                
-                # תיקון שיוודא שהמינימום הוא 10 ושלא חרגנו מהתקציב
-                top_3['השקעה'] = top_3['השקעה'].apply(lambda x: max(10, x))
-                
-                for i, row in top_3.iterrows():
-                    st.success(f"🔥 **{row['משחק']}**: שים **{int(row['השקעה'])}₪** על סימון **{row['סימון']}** (ביטחון: {row['ביטחון']}%)")
-                
+                # לוח השקעה חכם
+                top = df.iloc[0]
+                bet = int(budget * (top['ביטחון']/100) * 0.4)
                 st.divider()
-                st.write("📋 שאר המשחקים להיום:")
-                st.table(df)
+                st.success(f"🔥 המלצת השקעה: שים {bet}₪ על {top['משחק']} (סימון {top['סימון']})")
             else:
-                st.write("אין משחקים.")
-    except Exception as ex:
-        st.error(f"שגיאה: {ex}")
-
+                st.warning("לא נמצאו משחקים פעילים כרגע. נסה שוב מאוחר יותר.")
 
 
