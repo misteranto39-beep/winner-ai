@@ -5,7 +5,7 @@ from datetime import datetime
 import pytz
 import random
 
-API_KEY = "3f964672b9msh2a019a07c9b56ddp190e9djsnd5279e18d4bb"
+API_KEY = "75b85846e3mshe2df4634a5d059bp1ce989jsn17212542f103"
 ISRAEL_TZ = pytz.timezone('Asia/Jerusalem')
 
 st.set_page_config(page_title="Winner AI - Aggressive Strategy", layout="wide")
@@ -83,4 +83,5 @@ if st.button('מצא לי את הבאנקרים של היום'):
                 st.write("אין משחקים.")
     except Exception as ex:
         st.error(f"שגיאה: {ex}")
+
 
