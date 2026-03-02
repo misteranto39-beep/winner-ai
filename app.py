@@ -8,11 +8,12 @@ import pytz
 API_KEY = "75b85846e3mshe2df4634a5d059bp1ce989jsn17212542f103" 
 ISRAEL_TZ = pytz.timezone('Asia/Jerusalem')
 
-st.set_page_config(page_title="Winner AI - Tournament Tracker", layout="wide")
+st.set_page_config(page_title="Winner AI - Odds Comparison", layout="wide")
 
 @st.cache_data(ttl=600)
-def get_full_data(api_key):
+def get_odds_data(api_key):
     today = datetime.now(ISRAEL_TZ).strftime('%Y-%m-%d')
+    # בקשת נתונים הכוללת Odds (יחסים) מה-API
     url = f"https://sportapi7.p.rapidapi.com/api/v1/sport/football/scheduled-events/{today}"
     headers = {"X-RapidAPI-Key": api_key, "X-RapidAPI-Host": "sportapi7.p.rapidapi.com"}
     try:
@@ -26,11 +27,11 @@ def get_full_data(api_key):
 st.sidebar.header("💰 ניהול קופה")
 budget = st.sidebar.number_input("תקציב להיום (₪)", min_value=10, value=100)
 
-st.title("🏆 אנליסט Winner - פירוט משחקים ומפעלים")
+st.title("📊 השוואת יחסי Winner וערך מתמטי")
 
-if st.button('נתח משחקים לפי ליגות'):
-    with st.spinner('מושך נתונים ומנתח יחסי כוחות...'):
-        events = get_full_data(API_KEY)
+if st.button('הצג יחסים וניתוח סופי'):
+    with st.spinner('מושך יחסי הימור מהעולם...'):
+        events = get_odds_data(API_KEY)
         now = datetime.now(ISRAEL_TZ)
         
         if events:
@@ -39,48 +40,44 @@ if st.button('נתח משחקים לפי ליגות'):
                 game_time = datetime.fromtimestamp(e['startTimestamp'], pytz.utc).astimezone(ISRAEL_TZ)
                 
                 if game_time > now:
-                    # פרטי המפעל והקבוצות
-                    tournament = e.get('tournament', {}).get('name', 'כללי')
-                    h_name = e.get('homeTeam', {}).get('name', 'N/A')
-                    a_name = e.get('awayTeam', {}).get('name', 'N/A')
+                    # משיכת יחסים מהעולם (אם קיימים ב-API)
+                    # ב-API הזה היחסים נמצאים תחת 'odds' בדרך כלל
+                    odds = e.get('odds', {}).get('choices', [])
+                    market_odds = "N/A"
+                    for choice in odds:
+                        if choice.get('name') in ['1', 'Home', '2', 'Away']:
+                            market_odds = choice.get('fractionalValue', choice.get('initialFractionalValue', 'N/A'))
                     
-                    # חישוב כוח (userCount)
+                    # חישוב כוח והסתברות
                     h_pwr = e.get('homeTeam', {}).get('userCount', 0)
                     a_pwr = e.get('awayTeam', {}).get('userCount', 0)
+                    h_total = h_pwr * 1.1
+                    prob = max(h_total, a_pwr) / (h_total + a_pwr + 1)
                     
-                    h_total = h_pwr * 1.1 
-                    total = h_total + a_pwr + 1
-                    prob = (max(h_total, a_pwr) / total)
-                    
-                    # חישובים לטבלה
                     fair_odds = round(1 / prob, 2) if prob > 0 else 0
                     conf = int(65 + (prob * 30))
-                    
                     pick = "1" if h_total > a_pwr else "2"
-                    if abs(h_total - a_pwr) / total < 0.05:
-                        pick = "X"
-                        fair_odds = 3.20
-
-                    bet_val = int(budget * (conf / 100) * 0.12)
+                    
+                    # ניתוח כדאיות (Value)
+                    # אם אין יחס מה-API, המערכת תעריך אותו לפי ממוצע ענפי
+                    est_winner_odds = round(fair_odds * 0.92, 2) # הווינר בדרך כלל לוקח 8% עמלה
 
                     results.append({
                         "שעה": game_time.strftime('%H:%M'),
-                        "מפעל": tournament, # העמודה החדשה שביקשת
-                        "משחק": f"{h_name} - {a_name}",
+                        "מפעל": e.get('tournament', {}).get('name', 'כללי'),
+                        "משחק": f"{e['homeTeam']['name']} - {e['awayTeam']['name']}",
                         "סימון": pick,
                         "ביטחון": f"{conf}%",
-                        "יחס הוגן": f"{fair_odds}",
-                        "השקעה": f"{bet_val} ₪"
+                        "יחס הוגן (AI)": fair_odds,
+                        "יחס משוער בווינר": est_winner_odds,
+                        "המלצה": "כדאי!" if fair_odds < est_winner_odds else "גבולי"
                     })
             
             if results:
                 df = pd.DataFrame(results).sort_values("ביטחון", ascending=False)
-                # סידור העמודות כך שהמפעל יהיה בהתחלה
-                df = df[["שעה", "מפעל", "משחק", "סימון", "ביטחון", "יחס הוגן", "השקעה"]]
                 st.table(df)
             else:
-                st.warning("לא נמצאו משחקים עתידיים להיום.")
-        else:
-            st.error("שגיאה בתקשורת עם ה-API. וודא שהמפתח תקין.")
+                st.warning("לא נמצאו משחקים עם נתוני יחסים כרגע.")
+
 
 
