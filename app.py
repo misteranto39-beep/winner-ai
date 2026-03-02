@@ -6,7 +6,7 @@ import pytz
 import random
 
 # הגדרות בסיסיות
-API_KEY = "YOUR_API_KEY_HERE" # שים כאן את המפתח שלך
+API_KEY = "3f964672b9msh2a019a07c9b56ddp190e9djsnd5279e18d4bb" # שים כאן את המפתח שלך
 ISRAEL_TZ = pytz.timezone('Asia/Jerusalem')
 
 st.set_page_config(page_title="Winner AI Pro", layout="wide")
@@ -79,3 +79,4 @@ if st.button('נתח משחקים וחשב השקעה'):
                 
     except Exception as ex:
         st.error(f"שגיאה בעדכון: {ex}")
+
