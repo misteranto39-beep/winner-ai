@@ -31,13 +31,14 @@ if st.button('מצא לי את הבאנקרים של היום'):
         url = f"https://sportapi7.p.rapidapi.com/api/v1/sport/football/scheduled-events/{datetime.now(ISRAEL_TZ).strftime('%Y-%m-%d')}"
         res = requests.get(url, headers={"X-RapidAPI-Key": API_KEY, "X-RapidAPI-Host": "sportapi7.p.rapidapi.com"})
         
-        if res.status_code == 200:
-            events = res.json().get('events', [])
-            now = datetime.now(ISRAEL_TZ)
-            data = []
-            
-            for e in events:
-                ts = e.get('startTimestamp')
+       if res.status_code == 200:
+    events = res.json().get('events', [])
+    if not events:
+        st.warning("לא נמצאו משחקים אמיתיים לשעות הקרובות.")
+    else:
+        # כאן יופיעו רק המשחקים שהגיעו באמת מה-API
+        for e in events:
+            # הניתוח יתבצע רק על משחקים קיימים
                 if not ts: continue
                 g_time = datetime.fromtimestamp(ts, pytz.utc).astimezone(ISRAEL_TZ)
                 
@@ -83,5 +84,6 @@ if st.button('מצא לי את הבאנקרים של היום'):
                 st.write("אין משחקים.")
     except Exception as ex:
         st.error(f"שגיאה: {ex}")
+
 
 
