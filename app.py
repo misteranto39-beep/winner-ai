@@ -8,10 +8,10 @@ import pytz
 API_KEY = "75b85846e3mshe2df4634a5d059bp1ce989jsn17212542f103" 
 ISRAEL_TZ = pytz.timezone('Asia/Jerusalem')
 
-st.set_page_config(page_title="Winner AI - Real Market Analyst", layout="wide")
+st.set_page_config(page_title="Winner AI - Multi-Factor Analysis", layout="wide")
 
 @st.cache_data(ttl=600)
-def get_market_data(api_key):
+def get_advanced_data(api_key):
     today = datetime.now(ISRAEL_TZ).strftime('%Y-%m-%d')
     url = f"https://sportapi7.p.rapidapi.com/api/v1/sport/football/scheduled-events/{today}"
     headers = {"X-RapidAPI-Key": api_key, "X-RapidAPI-Host": "sportapi7.p.rapidapi.com"}
@@ -26,11 +26,11 @@ def get_market_data(api_key):
 st.sidebar.header("💰 ניהול קופה")
 budget = st.sidebar.number_input("תקציב להיום (₪)", min_value=10, value=100)
 
-st.title("🛡️ Winner AI - ניתוח הסתברות אמת")
+st.title("🤖 סוכן חכם - ניתוח משולב")
 
-if st.button('הצג המלצות אמינות'):
-    with st.spinner('מחשב הסתברויות מתמטיות...'):
-        events = get_market_data(API_KEY)
+if st.button('הרץ ניתוח עומק'):
+    with st.spinner('מחשב יחסי כוחות וביתיות...'):
+        events = get_advanced_data(API_KEY)
         now = datetime.now(ISRAEL_TZ)
         
         if events:
@@ -39,42 +39,55 @@ if st.button('הצג המלצות אמינות'):
                 game_time = datetime.fromtimestamp(e['startTimestamp'], pytz.utc).astimezone(ISRAEL_TZ)
                 
                 if game_time > now:
-                    # משיכת הצבעות (Votes)
+                    # משיכת נתונים
+                    h_rating = e.get('homeTeam', {}).get('userCount', 0)
+                    a_rating = e.get('awayTeam', {}).get('userCount', 0)
                     v_home = e.get('votes', {}).get('vote1', 0)
                     v_away = e.get('votes', {}).get('vote2', 0)
-                    total_v = v_home + v_away
                     
-                    # לוגיקת האמינות המשופרת
-                    if total_v > 10: # רף כניסה הגיוני
-                        conf = (max(v_home, v_away) / total_v) * 100
+                    # --- מנוע הניתוח המשולב ---
+                    if (v_home + v_away) > 50:
+                        # עדיפות ראשונה: חכמת המונים
+                        conf = (max(v_home, v_away) / (v_home + v_away)) * 100
                         pick = "1" if v_home > v_away else "2"
-                        source = "חכמת המונים"
+                        reason = "חכמת המונים"
                     else:
-                        # אם אין הצבעות - נשתמש בדירוג כוח (userCount)
-                        h_rating = e.get('homeTeam', {}).get('userCount', 0)
-                        a_rating = e.get('awayTeam', {}).get('userCount', 0)
-                        conf = 60 + (min(30, abs(h_rating - a_rating) / 1000))
-                        pick = "1" if h_rating > a_rating else "2"
-                        source = "דירוג איכות"
+                        # עדיפות שנייה: שקלול דירוג + ביתיות
+                        # מוסיפים 10% יתרון לקבוצה המארחת באופן אוטומטי
+                        h_power = h_rating * 1.1 
+                        a_power = a_rating
+                        
+                        diff_ratio = abs(h_power - a_power) / (h_power + a_power + 1)
+                        conf = 65 + (diff_ratio * 30)
+                        
+                        if diff_ratio < 0.05: # אם הקבוצות מאוד שקולות
+                            pick = "X"
+                            reason = "יחסי כוחות שקולים"
+                        else:
+                            pick = "1" if h_power > a_power else "2"
+                            reason = "ניתוח דירוג + ביתיות"
 
-                    # חישוב השקעה (סכום בשקלים)
-                    bet_val = int(budget * (conf / 100) * 0.15)
+                    # חישוב השקעה
+                    bet_val = int(budget * (conf / 100) * 0.12)
                     bet_val = max(10, bet_val)
 
                     results.append({
                         "שעה": game_time.strftime('%H:%M'),
                         "משחק": f"{e['homeTeam']['name']} - {e['awayTeam']['name']}",
-                        "ליגה": e.get('tournament', {}).get('name', 'General'),
                         "סימון": pick,
-                        "רמת אמינות": f"{int(conf)}%",
-                        "כמה לשים?": f"{bet_val} ₪",
-                        "בסיס הניתוח": source
+                        "ביטחון": f"{int(conf)}%",
+                        "סכום": f"{bet_val} ₪",
+                        "בסיס הניתוח": reason
                     })
             
             if results:
-                df = pd.DataFrame(results).sort_values("רמת אמינות", ascending=False)
+                df = pd.DataFrame(results).sort_values("ביטחון", ascending=False)
                 st.table(df)
                 top = df.iloc[0]
+                st.success(f"🔥 **הכי בטוח להמשך:** {top['משחק']} | סימון {top['סימון']} ({top['ביטחון']})")
+            else:
+                st.warning("אין משחקים רלוונטיים כרגע.")
                 st.success(f"💎 **באנקר פוטנציאלי:** {top['משחק']} (סימון {top['סימון']}) | לשים {top['כמה לשים?']}")
             else:
                 st.warning("לא נמצאו משחקים עתידיים להיום.")
+
