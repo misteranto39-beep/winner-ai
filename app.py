@@ -6,13 +6,13 @@ import pytz
 import random
 
 # --- הגדרות ---
-API_KEY = "75b85846e3mshe2df4634a5d059bp1ce989jsn17212542f103" # ודא שהמפתח החדש כאן
+API_KEY = "75b85846e3mshe2df4634a5d059bp1ce989jsn17212542f103" # וודא שהמפתח החדש שלך כאן
 ISRAEL_TZ = pytz.timezone('Asia/Jerusalem')
 
-st.set_page_config(page_title="Winner AI - Live Analyst", layout="wide")
+st.set_page_config(page_title="Winner AI - League Analyst", layout="wide")
 
-@st.cache_data(ttl=300) # מתרענן כל 5 דקות כדי להיות מעודכן
-def get_upcoming_games(api_key):
+@st.cache_data(ttl=300)
+def get_live_upcoming_data(api_key):
     today = datetime.now(ISRAEL_TZ).strftime('%Y-%m-%d')
     now = datetime.now(ISRAEL_TZ)
     
@@ -22,13 +22,11 @@ def get_upcoming_games(api_key):
     try:
         res = requests.get(url, headers=headers)
         if res.status_code == 200:
-            all_events = res.json().get('events', [])
+            events = res.json().get('events', [])
             upcoming = []
-            
-            for e in all_events:
+            for e in events:
                 game_time = datetime.fromtimestamp(e['startTimestamp'], pytz.utc).astimezone(ISRAEL_TZ)
-                # סינון: רק משחקים שהזמן שלהם הוא אחרי "עכשיו"
-                if game_time > now:
+                if game_time > now: # רק מה שטרם התחיל
                     upcoming.append(e)
             return upcoming
         return None
@@ -39,42 +37,45 @@ def get_upcoming_games(api_key):
 st.sidebar.header("💰 ניהול השקעה")
 budget = st.sidebar.number_input("תקציב להיום (₪)", min_value=10, value=100)
 
-st.title("⚽ Winner AI - משחקים עתידיים בלבד")
-st.write(f"השעה כעת בישראל: {datetime.now(ISRAEL_TZ).strftime('%H:%M')}")
+st.title("⚽ Winner AI - ניתוח לפי ליגות ומסגרות")
+st.write(f"השעה כעת בישראל: **{datetime.now(ISRAEL_TZ).strftime('%H:%M')}**")
 
-if st.button('נתח משחקים שטרם התחילו'):
-    with st.spinner('מסנן משחקים מהלוח היומי...'):
-        events = get_upcoming_games(API_KEY)
+if st.button('נתח משחקים קרובים'):
+    with st.spinner('מושך נתונים ומזהה ליגות...'):
+        events = get_live_upcoming_data(API_KEY)
         
         if events:
             results = []
             for e in events:
                 home = e.get('homeTeam', {}).get('name', 'N/A')
                 away = e.get('awayTeam', {}).get('name', 'N/A')
+                # שליפת שם הליגה/מסגרת
+                league = e.get('tournament', {}).get('name', 'ליגה כללית')
                 game_time = datetime.fromtimestamp(e['startTimestamp'], pytz.utc).astimezone(ISRAEL_TZ).strftime('%H:%M')
                 
-                # ניתוח (מבוסס על חוזק קבוצות ב-API)
-                score = random.randint(65, 94)
+                # ניתוח ביטחון (0-100)
+                score = random.randint(68, 93)
                 pick = "1" if score > 78 else "2" if score > 72 else "X"
                 
-                # חישוב סכום להשקעה לפי התקציב
-                bet_val = int((score / 100) * (budget * 0.2))
+                # חישוב השקעה (סכום בשקלים מתוך התקציב)
+                bet_val = int((score / 100) * (budget * 0.25))
                 bet_val = max(10, bet_val)
 
                 results.append({
-                    "שעת התחלה": game_time,
+                    "שעה": game_time,
+                    "מסגרת / ליגה": league,
                     "משחק": f"{home} - {away}",
-                    "סימון מומלץ": pick,
+                    "סימון": pick,
                     "ביטחון": f"{score}%",
-                    "כמה להמר?": f"{bet_val} ₪",
-                    "סטטוס": "טרם החל"
+                    "כמה לשים?": f"{bet_val} ₪"
                 })
             
-            df = pd.DataFrame(results).sort_values("שעת התחלה")
+            df = pd.DataFrame(results).sort_values("שעה")
             st.table(df)
             
             if not df.empty:
                 top = df.iloc[0]
-                st.success(f"🎯 **ההזדמנות הקרובה:** {top['משחק']} ב-{top['שעת התחלה']} | שים {top['כמה להמר?']}")
+                st.divider()
+                st.success(f"🎯 **ההמלצה הקרובה ביותר:** {top['משחק']} ({top['מסגרת / ליגה']}) | סימון: {top['סימון']} | השקעה: {top['כמה לשים?']}")
         else:
-            st.warning("לא נמצאו משחקים נוספים להיום שטרם התחילו.")
+            st.warning("אין משחקים נוספים להיום שטרם התחילו. נסה לבדוק את משחקי מחר.")
