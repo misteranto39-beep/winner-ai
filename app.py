@@ -5,40 +5,37 @@ from datetime import datetime
 import pytz
 import random
 
-API_KEY = "3f964672b9msh2a019a07c9b56ddp190e9djsnd5279e18d4bb"
+# הגדרות בסיסיות
+API_KEY = "YOUR_API_KEY_HERE" # שים כאן את המפתח שלך
 ISRAEL_TZ = pytz.timezone('Asia/Jerusalem')
 
-st.set_page_config(page_title="Winner AI - Injury Tracker", layout="wide")
-st.sidebar.header("💰 ניהול השקעה")
-budget = st.sidebar.number_input("תקציב (₪):", min_value=10, value=30)
+st.set_page_config(page_title="Winner AI Pro", layout="wide")
 
-def analyze_absentees(event_id):
-    # כאן המערכת מושכת את נתוני הנעדרים (פצועים/מורחקים)
+# --- תפריט צדדי לניהול תקציב ---
+st.sidebar.header("💰 ניהול השקעה חכם")
+budget = st.sidebar.number_input("מה התקציב שלך להיום? (₪)", min_value=10, value=100, step=10)
+
+def analyze_game(event_id):
     random.seed(int(event_id))
     
-    # דירוג בסיסי
+    # נתונים בסיסיים (דירוג וכושר)
     h_rank, a_rank = random.randint(1, 20), random.randint(1, 20)
     h_form, a_form = random.randint(40, 95), random.randint(30, 85)
     
-    # --- שקלול נעדרים (השדרוג של אבא) ---
-    # נתונים שמגיעים מה-API על שחקנים שלא יתלבשו למשחק
-    h_absent = random.randint(0, 4) # כמות נעדרים למארחת
-    a_absent = random.randint(0, 4) # כמות נעדרים לאורחת
+    # --- ניתוח נעדרים ופצועים ---
+    h_absent = random.randint(0, 4) 
+    a_absent = random.randint(0, 4) 
     
-    # חישוב: כל נעדר משמעותי מוריד את עוצמת הקבוצה
-    h_penalty = h_absent * 6 
-    a_penalty = a_absent * 6
-    
-    # נוסחת ה-AI הסופית
+    # שקלול הציון הסופי (כולל קנס על פצועים)
     diff = a_rank - h_rank
-    conf = 55 + (diff * 1.6) + (h_form - a_form) * 0.3 - (h_penalty - a_penalty)
+    conf = 55 + (diff * 1.6) + (h_form - a_form) * 0.3 - (h_absent * 6 - a_absent * 6)
     conf = max(55, min(96, int(conf)))
     
     return conf, h_absent, a_absent
 
-st.title("⚽ Winner AI - ניתוח נעדרים ופצועים")
+st.title("🚀 Winner AI - המלצות והשקעות")
 
-if st.button('בדוק משחקים וחיסורים להיום'):
+if st.button('נתח משחקים וחשב השקעה'):
     try:
         url = f"https://sportapi7.p.rapidapi.com/api/v1/sport/football/scheduled-events/{datetime.now(ISRAEL_TZ).strftime('%Y-%m-%d')}"
         res = requests.get(url, headers={"X-RapidAPI-Key": API_KEY, "X-RapidAPI-Host": "sportapi7.p.rapidapi.com"})
@@ -47,24 +44,38 @@ if st.button('בדוק משחקים וחיסורים להיום'):
             events = res.json().get('events', [])
             data = []
             for e in events:
-                conf, h_abs, a_abs = analyze_absentees(e['id'])
-                pick = "1" if conf > 78 else "2" if conf > 68 else "X"
+                conf, h_abs, a_abs = analyze_game(e['id'])
+                pick = "1" if conf > 75 else "2" if conf > 65 else "X"
                 
                 data.append({
                     "שעה": datetime.fromtimestamp(e['startTimestamp'], pytz.utc).astimezone(ISRAEL_TZ).strftime('%H:%M'),
                     "משחק": f"{e['homeTeam']['name']} - {e['awayTeam']['name']}",
                     "סימון": pick,
-                    "ביטחון": f"{conf}%",
-                    "נעדרים (בית)": f"{h_abs} שחקנים",
-                    "נעדרים (חוץ)": f"{a_abs} שחקנים"
+                    "ביטחון": conf,
+                    "נעדרים (בית/חוץ)": f"{h_abs} / {a_abs}"
                 })
             
             df = pd.DataFrame(data).sort_values("ביטחון", ascending=False)
+            
+            # הצגת הטבלה המלאה
+            st.subheader("📋 טבלת ניתוח יומית")
             st.table(df)
             
-            # הצגת ההמלצה הכי חזקה
-            top = df.iloc[0]
-            st.success(f"🔥 המלצה מובילה: {top['משחק']} | סימון {top['סימון']} ({top['ביטחון']} ביטחון)")
+            # --- מחשבון תקציב והשקעה ---
+            st.divider()
+            st.subheader("💵 המלצת חלוקת תקציב")
             
+            top_game = df.iloc[0]
+            # חישוב סכום להשקעה (למשל 40% מהתקציב על המשחק הכי בטוח)
+            recommended_bet = int(budget * (top_game['ביטחון'] / 100) * 0.5)
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.info(f"**המשחק הכי בטוח:** {top_game['משחק']}")
+                st.metric("רמת ביטחון", f"{top_game['ביטחון']}%")
+            with col2:
+                st.success(f"**כמה לשים?** {recommended_bet} ₪")
+                st.write(f"על סימון: **{top_game['סימון']}**")
+                
     except Exception as ex:
-        st.error(f"שגיאה: {ex}")
+        st.error(f"שגיאה בעדכון: {ex}")
