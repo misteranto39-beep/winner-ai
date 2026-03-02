@@ -8,10 +8,10 @@ import pytz
 API_KEY = "75b85846e3mshe2df4634a5d059bp1ce989jsn17212542f103" 
 ISRAEL_TZ = pytz.timezone('Asia/Jerusalem')
 
-st.set_page_config(page_title="Winner AI - Value Hunter", layout="wide")
+st.set_page_config(page_title="Winner AI - Momentum & Value", layout="wide")
 
 @st.cache_data(ttl=600)
-def get_winner_data(api_key):
+def get_advanced_data(api_key):
     today = datetime.now(ISRAEL_TZ).strftime('%Y-%m-%d')
     url = f"https://sportapi7.p.rapidapi.com/api/v1/sport/football/scheduled-events/{today}"
     headers = {"X-RapidAPI-Key": api_key, "X-RapidAPI-Host": "sportapi7.p.rapidapi.com"}
@@ -26,66 +26,80 @@ def get_winner_data(api_key):
 st.sidebar.header("💰 ניהול קופה")
 budget = st.sidebar.number_input("תקציב להיום (₪)", min_value=10, value=100)
 
-st.title("🎯 צייד הערך: המלצות ליחס 1.6+")
-st.subheader("משחקים עם פוטנציאל רווח גבוה וביטחון מבוסס AI")
+st.title("🚀 סוכן Winner: מומנטום ויחסי ערך")
+st.subheader("ניתוח 5 משחקי הזהב (יחס 1.6+ משולב בכושר נוכחי)")
 
-if st.button('מצא משחקים עם יחס משמעותי'):
-    with st.spinner('סורק משחקים ליחסי Value...'):
-        events = get_winner_data(API_KEY)
+if st.button('הפעל ניתוח מומנטום'):
+    with st.spinner('בודק היסטוריית משחקים ומומנטום...'):
+        events = get_advanced_data(API_KEY)
         now = datetime.now(ISRAEL_TZ)
         
         if events:
-            value_picks = []
+            final_picks = []
             for e in events:
                 game_time = datetime.fromtimestamp(e['startTimestamp'], pytz.utc).astimezone(ISRAEL_TZ)
                 
                 if game_time > now:
+                    # 1. נתוני בסיס
                     h_pwr = e.get('homeTeam', {}).get('userCount', 0)
                     a_pwr = e.get('awayTeam', {}).get('userCount', 0)
                     
-                    # חישוב הסתברות
-                    h_total = h_pwr * 1.12
-                    total_sum = h_total + a_pwr + 1
-                    prob = max(h_total, a_pwr) / total_sum
+                    # 2. חישוב מומנטום (Form)
+                    # ה-API מחזיר מחרוזת כמו 'WWDLW' (W=ניצחון, L=הפסד, D=תיקו)
+                    h_form_str = e.get('homeTeam', {}).get('form', 'DDDDD')
+                    a_form_str = e.get('awayTeam', {}).get('form', 'DDDDD')
                     
-                    # חישוב יחס משוער (כולל עמלת ווינר)
+                    def calc_form(s):
+                        return (s.count('W') * 2 + s.count('D') * 1 - s.count('L') * 1)
+                    
+                    h_momentum = calc_form(h_form_str)
+                    a_momentum = calc_form(a_form_str)
+                    
+                    # 3. שקלול כוח + ביתיות + מומנטום
+                    h_total = (h_pwr * 1.12) + (h_momentum * (h_pwr * 0.05))
+                    a_total = a_pwr + (a_momentum * (a_pwr * 0.05))
+                    
+                    total_sum = h_total + a_total + 1
+                    prob = max(h_total, a_total) / total_sum
+                    
+                    # 4. חישוב יחסים
                     fair_odds = round(1 / prob, 2) if prob > 0 else 0
-                    est_winner = round(fair_odds * 0.90, 2) # עמלה מעודכנת
+                    est_winner = round(fair_odds * 0.88, 2)
                     
                     conf = int(55 + (prob * 40))
                     
-                    # --- סינון "צייד הערך" ---
-                    # אנחנו רוצים יחס בין 1.55 ל-2.20 וביטחון של לפחות 70%
-                    if 1.55 <= est_winner <= 2.25 and conf >= 70:
-                        value_picks.append({
+                    # --- פילטר צייד הערך (Value Hunter) ---
+                    # יחס בין 1.6 ל-2.3 וביטחון מעל 70%
+                    if 1.60 <= est_winner <= 2.30 and conf >= 70:
+                        final_picks.append({
                             "שעה": game_time.strftime('%H:%M'),
-                            "מפעל": e.get('tournament', {}).get('name', 'כללי'),
                             "משחק": f"{e['homeTeam']['name']} - {e['awayTeam']['name']}",
-                            "סימון": "1" if h_total > a_pwr else "2",
+                            "סימון": "1" if h_total > a_total else "2",
                             "ביטחון": conf,
-                            "יחס משוער": est_winner
+                            "יחס משוער": est_winner,
+                            "מומנטום": "🔥 חם" if (h_momentum > 3 or a_momentum > 3) else "יציב",
+                            "מפעל": e.get('tournament', {}).get('name', 'כללי')
                         })
             
-            if value_picks:
-                # מיון לפי הכדאיות הכי גבוהה (שילוב של ביטחון כפול יחס)
-                df = pd.DataFrame(value_picks)
-                df['score'] = df['ביטחון'] * df['יחס משוער']
-                df = df.sort_values(by="score", ascending=False).head(5)
+            if final_picks:
+                df = pd.DataFrame(final_picks).sort_values(by="ביטחון", ascending=False).head(5)
                 
-                for index, row in df.iterrows():
-                    st.warning(f"💎 **{row['משחק']}** | יחס: {row['יחס משוער']} | ביטחון: {row['ביטחון']}%")
-                    st.write(f"⏰ {row['שעה']} | 🏆 {row['מפעל']} | 🎯 סימון: **{row['סימון']}**")
+                for idx, row in df.iterrows():
+                    color = "green" if row['מומנטום'] == "🔥 חם" else "white"
+                    st.markdown(f"### {row['משחק']} (יחס: {row['יחס משוער']})")
+                    st.write(f"🏆 {row['מפעל']} | ⏱️ {row['שעה']} | 🎯 סימון: **{row['סימון']}**")
+                    st.write(f"📊 ביטחון: **{row['ביטחון']}%** | מומנטום: :{color}[{row['מומנטום']}]")
                     st.divider()
                 
-                # המלצה לטופס "פגז"
+                # המלצת "טופס פגז"
                 top_2 = df.head(2)
                 if len(top_2) >= 2:
                     total_odds = round(top_2['יחס משוער'].prod(), 2)
-                    st.success(f"🚀 **טופס כפול מומלץ:** יחס כולל **{total_odds}**")
-                    st.write(f"שים {int(budget*0.2)} ₪ כדי לזכות ב-{int(budget*0.2*total_odds)} ₪")
+                    st.success(f"💰 **טופס כפול (Double) מומלץ:**")
+                    st.write(f"יחס כולל: **{total_odds}**")
+                    st.write(f"השקעה: **{int(budget*0.25)} ₪** ⮕ זכייה צפויה: **{int(budget*0.25*total_odds)} ₪**")
             else:
-                st.info("לא נמצאו כרגע משחקים בטווח ה-Value (1.6-2.2). נסה שוב בעוד שעה.")
-
+                st.info("לא נמצאו כרגע משחקים שעונים על כל התנאים (יחס 1.6+ ומומנטום חיובי).")
 
 
 
